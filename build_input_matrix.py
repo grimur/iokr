@@ -22,8 +22,18 @@ def _ppk(i_peaks, j_peaks, sm, si):
         return constant*numpy.sum(numpy.exp(-0.25*(mass_term + inte_term)))
 
 
+def ppk(*args):
+    # t0 = time.time()
+    a = ppk_loop(*args)
+    # t1 = time.time()
+    # b = ppk_limit(*args)
+    # t2 = time.time()
+    # print(t1-t0, t2-t1, a-b/a)
+    return a
+
+
 @jit(nopython=True)
-def ppk(spectrum_1, spectrum_2, sigma_mass, sigma_int):
+def ppk_loop(spectrum_1, spectrum_2, sigma_mass, sigma_int):
     # the inputs are really sigma^2, though
     # sigma_mass = 0.00001
     # sigma_int = 100000
@@ -43,6 +53,50 @@ def ppk(spectrum_1, spectrum_2, sigma_mass, sigma_int):
     # print(sum_term)
     # print(numpy.sum(sum_term))
     return constant_term * sum_term
+
+
+@jit(nopython=True)
+def ppk_limit(spectrum_1, spectrum_2, sigma_mass, sigma_int):
+    # the inputs are really sigma^2, though
+    # sigma_mass = 0.00001
+    # sigma_int = 100000
+    sigma_array = numpy.array([[sigma_mass, 0], [0, sigma_int]])
+    sigma_inv = numpy.linalg.inv(sigma_array)
+    len_1 = spectrum_1.shape[0]
+    len_2 = spectrum_2.shape[0]
+    constant_term = 1.0 / (len_1 * len_2 * 4 * numpy.pi * numpy.sqrt(sigma_mass * sigma_int))
+    sum_term = 0
+
+    tol = 5 * numpy.sqrt(sigma_mass)
+
+    for p_1_idx, p_2_idx in find_pairs(spectrum_1, spectrum_2, tol):
+        p_1 = spectrum_1[p_1_idx, :]
+        p_2 = spectrum_2[p_2_idx, :]
+        d = p_1 - p_2
+        sum_term += numpy.exp(-0.25 * numpy.sum(d * sigma_inv * d))
+    # print(sum_term)
+    # print(numpy.sum(sum_term))
+    return constant_term * sum_term
+
+
+@jit(nopython=True)
+def find_pairs(spec1, spec2, tol, shift=0):
+    matching_pairs = []
+    spec2_lowpos = 0
+    spec2_length = len(spec2)
+
+    for idx in range(len(spec1)):
+        mz, intensity = spec1[idx, :]
+        while spec2_lowpos < spec2_length and spec2[spec2_lowpos][0] + shift < mz - tol:
+            spec2_lowpos += 1
+        if spec2_lowpos == spec2_length:
+            break
+        spec2_pos = spec2_lowpos
+        while spec2_pos < spec2_length and spec2[spec2_pos][0] + shift < mz + tol:
+            matching_pairs.append((idx, spec2_pos))
+            spec2_pos += 1
+
+    return matching_pairs
 
 
 def ppk_nloss(spec1, spec2, prec1, prec2, sigma_mass, sigma_int):
@@ -213,16 +267,17 @@ def create_ppk_matrix_parallell():
             j_name = iokrdata.spectra[j][0]
             j_ms.load(ms_path + os.sep + j_name + '.ms')
 
-            print('%s vs %s' % (len(i_ms.spectrum), len(j_ms.spectrum)))
+            # print('%s vs %s' % (len(i_ms.spectrum), len(j_ms.spectrum)))
             
             args = (i_ms.spectrum, j_ms.spectrum, i_ms.parentmass, j_ms.parentmass, sigma_mass, sigma_int)
             active_jobs.append((i, j, p.apply_async(do_pair, args)))
 
-            if len(active_jobs) > 10:
+            if len(active_jobs) > 500:
                 active_jobs, results = gather_results(active_jobs)
 
                 for i_res, j_res, res in results:
-                    ij_peaks, ij_nloss, ij_diff = res
+                    # ij_peaks, ij_nloss, ij_diff = res
+                    ij_peaks, ij_nloss = res
 
                     kernel_matrix_peaks[i_res, j_res] = ij_peaks
                     kernel_matrix_peaks[j_res, i_res] = ij_peaks
@@ -230,22 +285,23 @@ def create_ppk_matrix_parallell():
                     kernel_matrix_nloss[i_res, j_res] = ij_nloss
                     kernel_matrix_nloss[j_res, i_res] = ij_nloss
 
-                    kernel_matrix_diff[i_res, j_res] = ij_diff
-                    kernel_matrix_diff[j_res, i_res] = ij_diff
+                    # kernel_matrix_diff[i_res, j_res] = ij_diff
+                    # kernel_matrix_diff[j_res, i_res] = ij_diff
 
-            print('done %s/%s' % (cnt, (ker_size ** 2) / 2))
+            if cnt % 100 == 0:
+                print('done %s/%s' % (cnt, (ker_size ** 2) / 2))
             
     numpy.savetxt('ppk_peaks.csv', kernel_matrix_peaks, delimiter=',')
     numpy.savetxt('ppk_nloss.csv', kernel_matrix_nloss, delimiter=',')
-    numpy.savetxt('ppk_diff.csv', kernel_matrix_diff, delimiter=',')
+    # numpy.savetxt('ppk_diff.csv', kernel_matrix_diff, delimiter=',')
 
-    kernel_matrix_ppkr = kernel_matrix_peaks + kernel_matrix_nloss + kernel_matrix_diff
+    kernel_matrix_ppkr = kernel_matrix_peaks + kernel_matrix_nloss # + kernel_matrix_diff
 
     numpy.savetxt('ppk_r.csv', kernel_matrix_ppkr, delimiter=',')
 
 
 def gather_results(active_jobs):
-    while len(active_jobs) > 10:
+    while len(active_jobs) > 500:
         done_jobs = []
         remaining_jobs = []
         for i, j, job in active_jobs:
@@ -262,9 +318,10 @@ def gather_results(active_jobs):
 def do_pair(i_spectrum, j_spectrum, i_parentmass, j_parentmass, sigma_mass, sigma_int):
     ij_peaks = ppk(i_spectrum, j_spectrum, sigma_mass, sigma_int)
     ij_nloss = ppk_nloss(i_spectrum, j_spectrum, i_parentmass, j_parentmass, sigma_mass, sigma_int)
-    ij_diff = ppk_diff(i_spectrum, j_spectrum, sigma_mass, sigma_int)
-    return ij_peaks, ij_nloss, ij_diff
+    # ij_diff = ppk_diff(i_spectrum, j_spectrum, sigma_mass, sigma_int)
+    return ij_peaks, ij_nloss  # , ij_diff
 
 
 if __name__ == '__main__':
     create_ppk_matrix_parallell()
+    # create_ppk_matrix()

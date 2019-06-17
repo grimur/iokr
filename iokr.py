@@ -35,6 +35,7 @@ class DataStore(object):
 class InputOutputKernelRegression(object):
     def __init__(self, data):
         self.data = data
+        self.kernel_vector_cache = {}
 
     def set_training_indices(self, indices=None, _lambda=0.1):
         self._lambda = _lambda
@@ -56,18 +57,23 @@ class InputOutputKernelRegression(object):
 
     def calculate_fingerprint_kernel_vector(self, fingerprint, kernel='gaussian'):
         if kernel == 'gaussian':
-            def k(a, b, gamma=0.1):
+            def k(a, b, gamma=0.01):
                 # kernel function
                 d_sq = numpy.sum(numpy.power((a - b), 2))
                 return numpy.exp(- gamma * d_sq)
 
-            def k_vec(a_mat, b, gamma=0.1):
+            def k_vec(a_mat, b, gamma=0.01):
                 # vectorised kernel function
                 d_sq = numpy.sum(numpy.power((a_mat - b), 2), axis=1)
                 return numpy.exp(- gamma * d_sq)
 
+        #fp_id = hash(str(fingerprint))
+        #if fp_id in self.kernel_vector_cache:
+        #    return self.kernel_vector_cache[fp_id]
+
         training_data_latent = self.data.get_latent_vectors_vec(self.training_set)
         kernel_vector = k_vec(training_data_latent, fingerprint.T)
+        #self.kernel_vector_cache[fp_id] = kernel_vector
         return kernel_vector
 
     def project_candidate(self, index, fingerprint):

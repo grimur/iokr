@@ -118,6 +118,10 @@ def load_spectra(filename):
 
 # Holds the data that the IOKR can request.
 # Needs to be central so we can get the kernel values for new samples
+# TODO:
+# - Also handle output kernel values (queriable in the same way?)
+# - more flexible way of loading (input) kernels
+# - Calclulate novel input kernels
 class IOKRDataServer(object):
     def __init__(self, path, kernel=None):
         self.path = path
@@ -127,7 +131,10 @@ class IOKRDataServer(object):
 
         self.folds = numpy.array(load_folds(path + os.sep + 'cv_ind.txt'))
         if kernel is None:
-            print('No kernel specified. Using average.')
+            print('No kernel specified. Please initialise manually.')
+            self.kernel = None
+        elif kernel == "avg":
+            print('Loading average kernel.')
             self.kernel = load_avg_kernel(path + os.sep + 'input_kernels')
         else:
             print('Loading kernel %s' % kernel)

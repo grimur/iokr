@@ -107,7 +107,7 @@ def find_pairs(spec1, spec2, tol, shift=0):
 def ppk_nloss(spec1, spec2, prec1, prec2, sigma_mass, sigma_int):
     spec1_loss = ([prec1, 0] - spec1) * [1, -1]
     spec2_loss = ([prec2, 0] - spec2) * [1, -1]
-    k_nloss = ppk(spec1_loss, spec2_loss, sigma_mass, sigma_int)
+    k_nloss = ppk_limit(spec1_loss[::-1], spec2_loss[::-1], sigma_mass, sigma_int)
     return k_nloss
 
 

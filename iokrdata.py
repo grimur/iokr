@@ -1,6 +1,7 @@
 import scipy.io
 import os
 import numpy
+import mk_fprints
 
 
 # Hold the GNPS records
@@ -19,6 +20,20 @@ class GNPS(object):
 
     def get_fingerprints(self, indices):
         return self.data_fp_array[:, indices].T
+
+    def set_fingerprint(self, fingerprint):
+        fp_list = []
+        for inchi in self.data_gnps['inchi']:
+            inchi = inchi[0][0]
+            fp = calc_fp(inchi, fingerprint)
+            fp_list.append(fp)
+        self.data_fp_array = numpy.array(fp_list).T
+
+    def set_fingerprint_from_file(self, filename):
+        self.data_fp_array = numpy.load(filename)
+
+    def save_fingerprint_to_file(self, filename):
+        numpy.save(filename, self.data_fp_array)
 
 
 def load_folds(filename):
@@ -87,6 +102,29 @@ def load_candidates(path):
     return candidate_sets
 
 
+def load_candidate_file_fp(filename, fp_filename, fingerprint):
+    candidates = []
+    data = scipy.io.loadmat(filename)
+    num_candidates, _ = data['inchi'].shape
+    cand_inchi = data['inchi'][:, 0]
+    if os.path.exists(fp_filename + '.npy'):
+        fp_data = numpy.load(fp_filename + '.npy')
+    else:
+        fp_data = [calc_fp(x[0], fingerprint) for x in cand_inchi]
+        numpy.save(fp_filename, fp_data)
+    for i in range(num_candidates):
+        inchi = cand_inchi[i][0]
+        cand_fingerprint = fp_data[i]
+        candidates.append((inchi, cand_fingerprint))
+    return candidates
+
+
+def calc_fp(inchi, fingerprint):
+    fp = mk_fprints.fingerprint_from_inchi(inchi, fingerprint)
+    return fp
+
+
+
 def load_candidate_file(filename):
     candidates = []
     data = scipy.io.loadmat(filename)
@@ -143,10 +181,17 @@ class IOKRDataServer(object):
         self.candidate_path = path + os.sep + 'candidates' + os.sep + 'candidate_set_%s.mat'
 
         self.dimension = None
+        self.fingerprint = None
 
     def get_candidates(self, formula):
-        for candidate_inchi, candidate_fp in load_candidate_file(self.candidate_path % formula):
-            yield candidate_inchi, candidate_fp
+        if self.fingerprint is None:
+            for candidate_inchi, candidate_fp in load_candidate_file(self.candidate_path % formula):
+                yield candidate_inchi, candidate_fp
+        else:
+            candidate_path = self.candidate_path % formula
+            fp_path = self.fp_path + os.sep + 'fp_%s.bin' % formula
+            for candidate_inchi, candidate_fp in load_candidate_file_fp(candidate_path, fp_path, self.fingerprint):
+                yield candidate_inchi, candidate_fp
 
     def get_sample(self, idx, skip_candidates=False):
         gnps_inchi, formula, fingerprint = self.gnps.get(idx)
@@ -208,6 +253,22 @@ class IOKRDataServer(object):
         else:
             indices = numpy.where(self.folds == label)[0]
         return indices
+
+    def set_fingerprint(self, fingerprint):
+        self.fingerprint = fingerprint
+        fppath = self.path + os.sep + 'fp_' + fingerprint + os.sep
+        fpfile = fppath + os.sep + 'fp_gnps.bin'
+        self.fp_path = fppath
+        if os.path.exists(fpfile + '.npy'):
+            print('Loading GNPS fingerprints from file')
+            self.gnps.set_fingerprint_from_file(fpfile + '.npy')
+        else:
+            print('Recalculating GNPS fingerprints')
+            self.gnps.set_fingerprint(fingerprint)
+            print('Saving GNPS fingerprints to file')
+            if not os.path.exists(fppath):
+                os.mkdir(fppath)
+            self.gnps.save_fingerprint_to_file(fpfile)
 
 
 # datapath = "/home/grimur/iokr/data"

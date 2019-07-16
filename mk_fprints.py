@@ -41,14 +41,14 @@ def default_fingerprint_from_inchi(inchi):
 def fingerprint_from_inchi(inchi, fingerprint_type=None):
     c = Compound(compound_string=inchi, identifier_type='inchi')
 
-    if fingerprint_type is None:
+    if fingerprint_type == 'cdk_default':
         fingerprinter = c.cdk.fingerprint.Fingerprinter()
-    elif fingerprint_type is 'default':
-        fingerprinter = c.cdk.fingerprint.Fingerprinter()
-    elif fingerprint_type is 'substructure':
+    elif fingerprint_type == 'substructure':
         fingerprinter = c.cdk.fingerprint.SubstructureFingerprinter()
-    elif fingerprint_type is 'klekota-roth':
+    elif fingerprint_type == 'klekota-roth':
         fingerprinter = c.cdk.fingerprint.KlekotaRothFingerprinter()
+    else:
+        raise SystemExit('Unknown fingerprint type: {}'.format(fingerprint_type))
 
     fp = fingerprinter.getBitFingerprint(c.mol_container)
     fp_size = fp.size()

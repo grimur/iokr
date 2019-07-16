@@ -23,10 +23,15 @@ class GNPS(object):
 
     def set_fingerprint(self, fingerprint):
         fp_list = []
+        num_fps = len(self.data_gnps['inchi'])
+        count = 0
         for inchi in self.data_gnps['inchi']:
+            count += 1
             inchi = inchi[0][0]
             fp = calc_fp(inchi, fingerprint)
             fp_list.append(fp)
+            if count % 100 == 0:
+                print('Done {} / {}'.format(count, num_fps))
         self.data_fp_array = numpy.array(fp_list).T
 
     def set_fingerprint_from_file(self, filename):

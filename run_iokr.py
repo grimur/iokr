@@ -23,8 +23,8 @@ def load_kernels(kernel_files):
 
 
 def gather_results(active_jobs, limit=25):
+    done_jobs = []
     while len(active_jobs) > limit:
-        done_jobs = []
         remaining_jobs = []
         for line in active_jobs:
             job = line[-1]
@@ -47,13 +47,12 @@ def run_iokr(data):
 
     excluded = []
     missing_candidate = []
-    result_cache = {}
     collected_rankings = []
 
     for label in sorted(list(set(data.folds))):
         print('label %s' % label)
         label_indices = data.get_indices(label, complement=True)
-        
+
         iokr = iokr_opt.InputOutputKernelRegression(data)
         iokr.set_training_indices(label_indices, _lambda=0.001)
         iokr.fit()
@@ -62,8 +61,6 @@ def run_iokr(data):
         for i in test_indices:
             if i not in data.test_sample_indices:
                 excluded.append(i)
-                continue
-            if i in result_cache.keys():
                 continue
 
             sample = data.get_sample(i)
@@ -106,13 +103,29 @@ def run_iokr(data):
 
                     # print(cr_b[res_i], cr_a[res_i], cr_a[res_i] == cr_b[res_i])
 
+    print('Clean up remaining jobs')
+
+    # clean up the last remaining jobs
+    active_jobs, results = gather_results(active_jobs, 0)
+    for res_i, res_formula, res_correct_index, res_label, res_total_count, res_output in results:
+        res_ranking = list(res_output[0])
+        correct_ranking = res_ranking.index(res_correct_index)
+        collected_rankings.append((res_i, correct_ranking, res_total_count))
+        total = len(collected_rankings)
+        print(float([x[1] for x in collected_rankings].count(0)) / total, total)
+
+    print('')
+    print('IOKR test run done!')
+    print('#samples: {}'.format(len(collected_rankings)))
+    print('top-1 acc: {}'.format(float([x[1] for x in collected_rankings].count(0)) / total, total))
+
     return collected_rankings
 
 
 def main():
     parser = argparse.ArgumentParser('Run IOKR test on a set')
     parser.add_argument('--kernel', dest='kernel', help='Kernel files', nargs='+')
-    parser.add_argument('--fp', dest='fingerprint', help='fingerprint type (substructure, cdk (default), klekota-roth', default=None)
+    parser.add_argument('--fp', dest='fingerprint', help='fingerprint type (substructure, cdk (default), klekota-roth', default='cdk_default')
     parser.add_argument('--data', dest='datapath', help='data path', required=True)
     parser.add_argument('--output', dest='output', help='output label', required=True)
     args = parser.parse_args()

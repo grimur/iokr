@@ -2,6 +2,28 @@ import scipy.io
 import os
 import numpy
 import mk_fprints
+import spectrum
+
+
+def normalise_kernel(matrix):
+    return matrix / numpy.sqrt(numpy.outer(matrix.diagonal(), matrix.diagonal()))
+
+
+def load_kernel_file(filename, normalise=True):
+    kernel = numpy.load(filename)
+    if normalise:
+        return normalise_kernel(kernel)
+    else:
+        return kernel
+
+
+def load_kernels(kernel_files, normalise=True):
+    kernel_matrices = [load_kernel_file(x, normalise) for x in kernel_files]
+    kernel_sum = numpy.sum(kernel_matrices, axis=0)
+    if normalise:
+        return normalise_kernel(kernel_sum)
+    else:
+        return kernel_sum / len(kernel_matrices)
 
 
 # Hold the GNPS records
@@ -187,6 +209,15 @@ class IOKRDataServer(object):
 
         self.dimension = None
         self.fingerprint = None
+        self.ms = []
+
+    def load_ms_files(self, path):
+        for spectrum_id in [x[0] for x in self.spectra]:
+            ms = spectrum.MSSpectrum()
+            ms.correct_for_ionisation = True
+            ms.normalise = True
+            ms.load(path + os.sep + spectrum_id + '.ms')
+            self.ms.append(ms)
 
     def get_candidates(self, formula):
         if self.fingerprint is None:
@@ -259,6 +290,9 @@ class IOKRDataServer(object):
             indices = numpy.where(self.folds == label)[0]
         return indices
 
+    def get_all_indices(self):
+        return [x for x in range(len(self.folds))]
+
     def set_fingerprint(self, fingerprint):
         self.fingerprint = fingerprint
         fppath = self.path + os.sep + 'fp_' + fingerprint + os.sep
@@ -274,6 +308,16 @@ class IOKRDataServer(object):
             if not os.path.exists(fppath):
                 os.mkdir(fppath)
             self.gnps.save_fingerprint_to_file(fpfile)
+
+    def build_kernel_matrix(self):
+        kernel_matrix = numpy.zeros((len(self.spectra), len(self.spectra)))
+        for i in range(len(self.spectra)):
+            for j in range(i):
+                kernel_value = self.calculate_kernel(self.ms[i], self.ms[j])
+                kernel_matrix[i, j] = kernel_value
+                kernel_matrix[j, i] = kernel_value
+
+        self.kernel = normalise_kernel(kernel_matrix)
 
 
 # datapath = "/home/grimur/iokr/data"

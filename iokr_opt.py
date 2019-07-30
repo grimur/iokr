@@ -37,7 +37,7 @@ def project_candidate_kernel_wrapper(index, candidate_kernels, x_kernel_vector, 
     return [project_candidate_kernel_opt(index, kernel_vector, x_kernel_vector, latent_basis) for kernel_vector in candidate_kernels]
 
 
-@jit(nopython=True)
+# @jit(nopython=True)
 def rank_candidates_opt(index, candidate_fingerprints, latent, x_kernel_vector, latent_basis, gamma):
     candidate_projections = [project_candidate_opt(index, fingerprint, latent, x_kernel_vector, latent_basis, gamma) for fingerprint in candidate_fingerprints]
     candidate_distances = [x[0] for x in candidate_projections]
@@ -50,37 +50,6 @@ def rank_candidate_kernel_opt(index, candidate_kernels, latent, x_kernel_vector,
     candidate_distances = [x[0] for x in candidate_projections]
     fingerprint_kernel_vectors = [x[1] for x in candidate_projections]
     return numpy.argsort(numpy.array(candidate_distances))[::-1], fingerprint_kernel_vectors
-
-
-class DataStore(object):
-    """
-    This is probably outdated!
-    """
-    def __init__(self, kernel_matrix, latent_vectors):
-        self.kernel_matrix = kernel_matrix
-        # normalise the kernel matrix
-        for i in range(self.kernel_matrix.shape[0]):
-            for j in range(i + 1):
-                self.kernel_matrix[i, j] = self.kernel_matrix[i, j] / numpy.sqrt(self.kernel_matrix[i, i] * self.kernel_matrix[j, j])
-                self.kernel_matrix[j, i] = self.kernel_matrix[j, i] / numpy.sqrt(self.kernel_matrix[i, i] * self.kernel_matrix[j, j])
-        self.latent_vectors = latent_vectors
-
-        self.data_size, self.dimensions = latent_vectors.shape
-
-    def get_latent_vector(self, index):
-        return self.latent_vectors[index]
-
-    def kernel_product(self, index_1, index_2):
-        return self.kernel_matrix[index_1, index_2]
-
-    def get_kernel_matrix(self, indices):
-        return self.kernel_matrix[numpy.ix_(indices, indices)]
-
-    def get_latent_vectors(self, indices):
-        return self.latent_vectors[indices, :]
-
-    def get_dimension(self):
-        return self.dimensions
 
 
 class InputOutputKernelRegression(object):
@@ -164,12 +133,16 @@ class InputOutputKernelRegression(object):
         return candidate_ranking
 
     def get_data_for_candidate_ranking(self, index):
-        latent = self.latent
+        latent, latent_basis, gamma = self.get_data_for_novel_candidate_ranking()
         x_kernel_vector = self.data.kernel_product_set(index, self.training_set)
-        latent_basis = self.latent_basis
-        gamma = 0.01
 
         return latent, x_kernel_vector, latent_basis, gamma
+
+    def get_data_for_novel_candidate_ranking(self):
+        latent = self.latent
+        latent_basis = self.latent_basis
+        gamma = 0.01
+        return latent, latent_basis, gamma
 
     def project(self, index):
         x_kernel_vector = self.data.kernel_product_set(index, self.training_set)
@@ -179,6 +152,19 @@ class InputOutputKernelRegression(object):
     def test(self, index, cutoff=0.01):
         proj = self.project(index)
         return [1 if x > cutoff else 0 for x in proj]
+
+    def get_kernel_vector_for_sample(self, ms):
+        kernel_vector = []
+
+        ms_auto = self.data.calculate_kernel(ms, ms)
+        for idx in self.training_set:
+            t_sp = self.data.ms[idx]
+            t_sp_auto = self.data.calculate_kernel(t_sp, t_sp)
+            ms_t_sp = self.data.calculate_kernel(ms, t_sp)
+            kernel_value = ms_t_sp / numpy.sqrt(ms_auto * t_sp_auto)
+            kernel_vector.append(kernel_value)
+
+        return kernel_vector
 
 
 def main():

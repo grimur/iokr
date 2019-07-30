@@ -1,37 +1,6 @@
 import numpy
 
 
-class DataStore(object):
-    """
-    This is probably outdated!
-    """
-    def __init__(self, kernel_matrix, latent_vectors):
-        self.kernel_matrix = kernel_matrix
-        # normalise the kernel matrix
-        for i in range(self.kernel_matrix.shape[0]):
-            for j in range(i + 1):
-                self.kernel_matrix[i, j] = self.kernel_matrix[i, j] / numpy.sqrt(self.kernel_matrix[i, i] * self.kernel_matrix[j, j])
-                self.kernel_matrix[j, i] = self.kernel_matrix[j, i] / numpy.sqrt(self.kernel_matrix[i, i] * self.kernel_matrix[j, j])
-        self.latent_vectors = latent_vectors
-
-        self.data_size, self.dimensions = latent_vectors.shape
-
-    def get_latent_vector(self, index):
-        return self.latent_vectors[index]
-
-    def kernel_product(self, index_1, index_2):
-        return self.kernel_matrix[index_1, index_2]
-
-    def get_kernel_matrix(self, indices):
-        return self.kernel_matrix[numpy.ix_(indices, indices)]
-
-    def get_latent_vectors(self, indices):
-        return self.latent_vectors[indices, :]
-
-    def get_dimension(self):
-        return self.dimensions
-
-
 class InputOutputKernelRegression(object):
     def __init__(self, data):
         self.data = data

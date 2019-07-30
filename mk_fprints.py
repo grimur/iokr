@@ -38,6 +38,26 @@ def default_fingerprint_from_inchi(inchi):
     return fp_array
 
 
+def fingerprint_from_smiles(smiles, fingerprint_type=None):
+    c = Compound(compound_string=smiles, identifier_type='smiles')
+
+    if fingerprint_type == 'cdk_default':
+        fingerprinter = c.cdk.fingerprint.Fingerprinter()
+    elif fingerprint_type == 'substructure':
+        fingerprinter = c.cdk.fingerprint.SubstructureFingerprinter()
+    elif fingerprint_type == 'klekota-roth':
+        fingerprinter = c.cdk.fingerprint.KlekotaRothFingerprinter()
+    else:
+        raise SystemExit('Unknown fingerprint type: {}'.format(fingerprint_type))
+
+    fp = fingerprinter.getBitFingerprint(c.mol_container)
+    fp_size = fp.size()
+    fp_array = numpy.zeros(fp_size)
+    for fp_bit in range(fp_size):
+        fp_array[fp_bit] = fp.get(fp_bit)
+    return fp_array
+
+
 def fingerprint_from_inchi(inchi, fingerprint_type=None):
     c = Compound(compound_string=inchi, identifier_type='inchi')
 

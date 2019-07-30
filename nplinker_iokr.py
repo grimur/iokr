@@ -47,8 +47,8 @@ class IOKRWrapper(object):
 
 def get_iokr_server():
     datapath = "/home/grimur/iokr/data"
-    kernel_files = [datapath + os.sep + 'input_kernels_gh/ppk_dag_all_shifted_normalised_nloss.npy',
-                    datapath + os.sep + 'input_kernels_gh/ppk_dag_all_shifted_normalised_peaks.npy']
+    kernel_files = [datapath + os.sep + 'input_kernels_gh/ppk_dag_all_normalised_shifted_nloss.npy',
+                    datapath + os.sep + 'input_kernels_gh/ppk_dag_all_normalised_shifted_peaks.npy']
     fingerprint_type = "klekota-roth"
     iokr_wrapper = IOKRWrapper()
 

@@ -8,15 +8,9 @@ import itertools
 
 from spectrum import MSSpectrum
 from spectrum import ppk
+from spectrum import ppk_nloss
 
 import time
-
-
-def ppk_nloss(spec1, spec2, prec1, prec2, sigma_mass, sigma_int):
-    spec1_loss = ([prec1, 0] - spec1) * [1, -1]
-    spec2_loss = ([prec2, 0] - spec2) * [1, -1]
-    k_nloss = ppk(spec1_loss[::-1], spec2_loss[::-1], sigma_mass, sigma_int)
-    return k_nloss
 
 
 def ppk_r(spec1, spec2, prec1, prec2, sigma_mass, sigma_int):

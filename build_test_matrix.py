@@ -1,3 +1,4 @@
+from pyteomics import mgf
 import multiprocessing
 import spectrum_filters
 import iokrdata as data
@@ -6,10 +7,10 @@ import numpy
 import os
 import itertools
 
+import time
+
 from spectrum import MSSpectrum
 from spectrum import ppk
-
-import time
 
 
 def ppk_nloss(spec1, spec2, prec1, prec2, sigma_mass, sigma_int):
@@ -31,6 +32,10 @@ def ppk_diff(spec1, spec2, sigma_mass, sigma_int):
     spec2_diff = numpy.array([y - x for x, y in itertools.combinations(spec2, 2)])
     k_diff = ppk(spec1_diff, spec2_diff, sigma_mass, sigma_int)
     return k_diff
+
+
+def strip_leading(line):
+    return ' '.join(line.split()[1:])
 
 
 def create_ppk_matrix():
@@ -103,50 +108,34 @@ def create_ppk_matrix_stripe_serial(filter_func, shift, normalise, output_name):
     iokr_data_path = '/home/grimur/iokr/data'
     data_gnps = scipy.io.loadmat("/home/grimur/iokr/data/data_GNPS.mat")
     ms_path = '/home/grimur/iokr/data/SPEC'
+    candidate_set = '/home/grimur/iokr/data/mibig/matched_mibig_gnps_2.0.mgf'
+    candidate_set_size = 257
 
     iokrdata = data.IOKRDataServer(iokr_data_path)
     ker_size = len(iokrdata.spectra)
 
-    kernel_matrix_peaks = numpy.zeros((ker_size, ker_size))
+    kernel_matrix_peaks = numpy.zeros((candidate_set_size, ker_size))
     kernel_matrix_nloss = numpy.zeros_like(kernel_matrix_peaks)
-
-    p = multiprocessing.Pool(8)
-    active_jobs = []
 
     t0 = time.time()
     names = [x[0] for x in iokrdata.spectra]
     cnt = 0
-    for i in range(len(iokrdata.spectra)):
-        if i == len(iokrdata.spectra) - 1:
-            wait_for_clear = 0
-        else:
-            wait_for_clear = 10
-
+    for i in mgf.read(candidate_set):
+        i_ms = MSSpectrum(i)
         # active_jobs.append((i, p.apply_async(do_stripe, (i, names))))
-        res = do_stripe(i, names, filter_func, shift, normalise)
-        i_res = i
+        res = do_stripe(i_ms, names, filter_func, shift, normalise)
 
-        if True:
-        # if len(active_jobs) > wait_for_clear:
-        #     active_jobs, results = gather_results_2(active_jobs, queue_length=wait_for_clear)
-        #     for i_res, res in results:
-                for j_res, values in enumerate(res):
-                    ij_peaks, ij_nloss = values
+        for j_idx, values in enumerate(res):
+            ij_peaks, ij_nloss = values
 
-                    kernel_matrix_peaks[i_res, j_res] = ij_peaks
-                    kernel_matrix_peaks[j_res, i_res] = ij_peaks
+            kernel_matrix_peaks[cnt, j_idx] = ij_peaks
+            kernel_matrix_nloss[cnt, j_idx] = ij_nloss
 
-                    kernel_matrix_nloss[i_res, j_res] = ij_nloss
-                    kernel_matrix_nloss[j_res, i_res] = ij_nloss
+        cnt += 1
+        print('done %s / %s, %s' % (cnt, candidate_set_size, time.time() - t0))
 
-                    cnt += 1
-                    if cnt % 100 == 0:
-                        print('done %s/%s, %s' % (cnt, (ker_size ** 2) / 2, time.time() - t0))
-                        t0 = time.time()
-
-
-    numpy.save(output_name + '_peaks.npy', kernel_matrix_peaks)
-    numpy.save(output_name + '_nloss.npy', kernel_matrix_nloss)
+    numpy.save(output_name + '_test_peaks.npy', kernel_matrix_peaks)
+    numpy.save(output_name + '_test_nloss.npy', kernel_matrix_nloss)
 
 
 def gather_results(active_jobs):
@@ -179,7 +168,7 @@ def gather_results_2(active_jobs, queue_length):
     return active_jobs, done_jobs
 
 
-def do_stripe(i, names, filter_func, shift, normalise):
+def do_stripe(i_ms, names, filter_func, shift, normalise):
     iokr_data_path = '/home/grimur/iokr/data'
     data_gnps = scipy.io.loadmat("/home/grimur/iokr/data/data_GNPS.mat")
     ms_path = '/home/grimur/iokr/data/SPEC'
@@ -187,24 +176,31 @@ def do_stripe(i, names, filter_func, shift, normalise):
     sigma_mass = 0.00001
     sigma_int = 100000.0
 
-    i_ms = MSSpectrum()
+    # i_ms = MSSpectrum()
     i_ms.correct_for_ionisation = shift
     i_ms.filter = filter_func
     i_ms.normalise = normalise
+
     j_ms = MSSpectrum()
     j_ms.correct_for_ionisation = shift
     j_ms.filter = filter_func
     j_ms.normalise = normalise
+
+    ii_peaks = ppk(i_ms.spectrum, i_ms.spectrum, sigma_mass, sigma_int)
+    ii_nloss = ppk_nloss(i_ms.spectrum, i_ms.spectrum, i_ms.parentmass, i_ms.parentmass, sigma_mass, sigma_int)
     
-    i_ms.load(ms_path + os.sep + names[i] + '.ms')
+    #i_ms.load(ms_path + os.sep + names[i] + '.ms')
     results = []
-    for j in range(i + 1):
-        j_ms.load(ms_path + os.sep + names[j] + '.ms')
+    for name in names:
+        j_ms.load(ms_path + os.sep + name + '.ms')
+
+        jj_peaks = ppk(j_ms.spectrum, j_ms.spectrum, sigma_mass, sigma_int)
+        jj_nloss = ppk_nloss(j_ms.spectrum, j_ms.spectrum, j_ms.parentmass, j_ms.parentmass, sigma_mass, sigma_int)
 
         ij_peaks = ppk(i_ms.spectrum, j_ms.spectrum, sigma_mass, sigma_int)
         ij_nloss = ppk_nloss(i_ms.spectrum, j_ms.spectrum, i_ms.parentmass, j_ms.parentmass, sigma_mass, sigma_int)
 
-        results.append((ij_peaks, ij_nloss))
+        results.append((ij_peaks / numpy.sqrt(ii_peaks * jj_peaks), ij_nloss / numpy.sqrt(ii_nloss * jj_nloss)))
 
     return results
 

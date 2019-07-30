@@ -1,6 +1,7 @@
 import numpy
 import json
 import os
+import pickle
 
 #import sys
 #sys.path.append('/home/grimur/git/lda')
@@ -124,6 +125,13 @@ def filter_by_collected_dag(self):
         _ALL_DAG_MASSES = load_all_dag_masses(treepath)
 
     return filter_by_mass(self.shifted_spectrum, _ALL_DAG_MASSES, tol)
+
+
+def filter_by_frozen_dag(self):
+    with open('dag_masses.bin', 'rb') as f:
+        dag_masses = pickle.load(f)
+    tol = 0.005
+    return filter_by_mass(self.shifted_spectrum, dag_masses, tol)
 
 
 def load_all_tree_masses(path):

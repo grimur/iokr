@@ -3,6 +3,7 @@ import os
 import numpy
 import mk_fprints
 import spectrum
+import spectrum_filters
 
 
 def normalise_kernel(matrix):
@@ -216,6 +217,7 @@ class IOKRDataServer(object):
             ms = spectrum.MSSpectrum()
             ms.correct_for_ionisation = True
             ms.normalise = True
+            ms.filter = spectrum_filters.filter_by_frozen_dag
             ms.load(path + os.sep + spectrum_id + '.ms')
             self.ms.append(ms)
 
